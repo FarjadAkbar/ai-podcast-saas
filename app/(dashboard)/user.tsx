@@ -40,11 +40,11 @@ export function User() {
         <DropdownMenuSeparator />
         {user ? (
           <DropdownMenuItem>
-            <SignOutButton redirectUrl= "/login" />
+            <SignOutButton redirectUrl= "/sign-in" />
           </DropdownMenuItem>
         ) : (
           <DropdownMenuItem>
-            <Link href="/login">Sign In</Link>
+            <Link href="/sign-in">Sign In</Link>
           </DropdownMenuItem>
         )}
       </DropdownMenuContent>

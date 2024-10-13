@@ -1,15 +1,13 @@
 "use client";
-import { SignIn, SignUp, useUser } from '@clerk/nextjs'
-import { redirect } from 'next/navigation';
+import { SignIn, SignUp } from '@clerk/nextjs'
+import { Unauthenticated } from 'convex/react';
 
 export default function Auth({ isSignup }: { isSignup?: boolean }) {
-    const { isSignedIn } = useUser()
-  
-  if(isSignedIn){
-    redirect("/");
-  }
-
   return (
-    isSignup ? <SignUp signInUrl='/login' /> : <SignIn signUpUrl='/signup' />
+    <Unauthenticated>
+      {
+        isSignup ? <SignUp signInUrl='/sign-in' /> : <SignIn signUpUrl='/sign-up' />
+      }
+    </Unauthenticated>
   )
 }
