@@ -1,4 +1,5 @@
 'use client';
+import { useEffect, useState, useTransition } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -23,9 +24,10 @@ import {
   FormLabel,
   FormMessage
 } from '@/components/ui/form';
-import { PollyClient, DescribeVoicesCommand, Voice, SynthesizeSpeechCommand } from "@aws-sdk/client-polly";
-import { useEffect } from 'react';
-import { useState } from 'react';
+import { Voice } from "@aws-sdk/client-polly";
+import { useAction } from "convex/react";
+import { api } from '@/convex/_generated/api';
+import { v4 as uuidv4 } from 'uuid';
 
 // Define the schema using Zod
 const createPodcastSchema = z.object({
@@ -35,58 +37,58 @@ const createPodcastSchema = z.object({
 
 type CreatePodcastFormValues = z.infer<typeof createPodcastSchema>;
 
-const config = {
-  region: "us-west-2",
-  credentials: {
-    accessKeyId: process.env.NEXT_PUBLIC_AWS_ACCESS_KEY_ID!, 
-    secretAccessKey: process.env.NEXT_PUBLIC_AWS_SECRET_ACCESS_KEY!,
-  },
-};
 
-const client = new PollyClient(config);
 
 export default function CreatePodcastPage() {
-  const [voices, setVoices] = useState<Voice[]>([]);  // State to store the fetched voices
+  const [voices, setVoices] = useState<Voice[]>([]);  
+  const [audioSrc, setAudioSrc] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  const fetchVoicesMutation = useAction(api.action.fetchVoices);
+  const generateAudioMutation = useAction(api.action.generateAudio);
+  const fileMutation = useAction(api.action.uploadToS3);
+
   const form = useForm<CreatePodcastFormValues>({
     resolver: zodResolver(createPodcastSchema),
   });
 
   useEffect(() => {
-    // Function to fetch the voices from AWS Polly API
-    const fetchVoices = async () => {
-      
+    const fetchVoicesFromPolly = async () => {
       try {
-      const command = new DescribeVoicesCommand({
-        Engine: 'standard',
-        LanguageCode: 'en-US',
-        IncludeAdditionalLanguageCodes: true
-      });
-      const response = await client.send(command);
-      setVoices(response.Voices || []);
-    } catch (error) {
-      console.log(error, "erro..........")
-    }
+        const fetchedVoices = await fetchVoicesMutation();
+        setVoices(fetchedVoices);
+      } catch (error) {
+        console.error("Failed to fetch voices:", error);
+      }
     };
 
-    console.log("newwe", "..........")
-    fetchVoices();
-  }, []); // Run this effect on component mount
+    fetchVoicesFromPolly();
+  }, []);
 
-  const generateAudio = async () => {
-    const formData = form.getValues();
-    console.log(formData, "formdata")
-    if(formData.voice && formData.audioPrompt) {
-      const command = new SynthesizeSpeechCommand({
-        Engine: "standard",
-        LanguageCode: "en-US",
-        OutputFormat: "mp3",
-        VoiceId: formData.voice as Voice["Id"],
-        Text: formData.audioPrompt,
-      })
-      const response = await client.send(command)
-      console.log(response, "responsesssss")
+
+  const handleGenerateAudio = async () => {
+    const formData = form.getValues(); // Assuming you're using a form here
+
+    if (formData.voice && formData.audioPrompt) {
+      try {
+        const audioBuffer = await generateAudioMutation({ voiceId: formData.voice, audioPrompt: formData.audioPrompt });
+        startTransition(() => {
+          const blob = new Blob([audioBuffer], { type: 'audio/mp3' });
+          const audioUrl = URL.createObjectURL(blob);
+
+          // const arrayBuffer = await blob.arrayBuffer();
+          // const fileName = `audio_${uuidv4()}.mp3`; // Generate a unique filename
+          // await fileMutation({ blob: arrayBuffer, fileName });
+          
+          setAudioSrc(audioUrl);
+        });
+      } catch (error) {
+        console.error("Failed to generate audio:", error);
+      }
     }
-  }
+  };
+  
+
 
   const onSubmit = (data: CreatePodcastFormValues) => {
     console.log('Podcast Data:', data);
@@ -97,7 +99,6 @@ export default function CreatePodcastPage() {
       <h1>Create Podcast</h1>
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
-          {/* Voices Select */}
           <FormField
             control={form.control}
             name="voice"
@@ -152,10 +153,13 @@ export default function CreatePodcastPage() {
               </FormItem>
             )}
           />
-          <Button type='button' onClick={() => generateAudio()}>Generate Voice</Button>
+          <Button type='button' disabled={isPending} onClick={() => handleGenerateAudio()}>Generate Voice</Button>
+          {audioSrc && (
+            <audio controls src={audioSrc}></audio>
+          )}
 
           {/* Submit Button */}
-          <Button type="submit">Submit</Button>
+          <Button type="submit" disabled={isPending}>Submit</Button>
         </form>
       </Form>
     </section>
