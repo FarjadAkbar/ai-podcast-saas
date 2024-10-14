@@ -41,7 +41,7 @@ type CreatePodcastFormValues = z.infer<typeof createPodcastSchema>;
 
 export default function CreatePodcastPage() {
   const [voices, setVoices] = useState<Voice[]>([]);  
-  const [audioSrc, setAudioSrc] = useState<string | null>(null);
+  const [audioSrc, setAudioSrc] = useState<string | null | undefined>(null);
   const [isPending, startTransition] = useTransition();
 
   const fetchVoicesMutation = useAction(api.action.fetchVoices);
@@ -71,8 +71,16 @@ export default function CreatePodcastPage() {
     if (formData.voice && formData.audioPrompt) {
       try {
         const audioFile = await generateAudioMutation({ voiceId: formData.voice, audioPrompt: formData.audioPrompt });
+        
+        // Immediately start the transition for non-urgent UI updates
         startTransition(() => {
-          setAudioSrc(audioFile.outputUri ?? null);
+          const timer = setTimeout(() => {
+            setAudioSrc(audioFile.outputUri); // Set the audio source after 3 seconds
+          }, 2000);
+
+          // Ensure timer cleanup outside of startTransition (to avoid memory leaks)
+          const cleanup = () => clearTimeout(timer);
+          cleanup();
         });
       } catch (error) {
         console.error("Failed to generate audio:", error);
@@ -148,7 +156,7 @@ export default function CreatePodcastPage() {
           <Button type='button' disabled={isPending} onClick={() => handleGenerateAudio()}>Generate Voice</Button>
 
           {audioSrc && (
-            <audio controls src={audioSrc} mediaGroup='audio'></audio>
+            <audio controls src={audioSrc}></audio>
           )}
 
           {/* Submit Button */}
