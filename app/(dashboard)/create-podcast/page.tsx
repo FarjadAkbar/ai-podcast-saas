@@ -46,7 +46,6 @@ export default function CreatePodcastPage() {
 
   const fetchVoicesMutation = useAction(api.action.fetchVoices);
   const generateAudioMutation = useAction(api.action.generateAudio);
-  const fileMutation = useAction(api.action.uploadToS3);
 
   const form = useForm<CreatePodcastFormValues>({
     resolver: zodResolver(createPodcastSchema),
@@ -71,16 +70,9 @@ export default function CreatePodcastPage() {
 
     if (formData.voice && formData.audioPrompt) {
       try {
-        const audioBuffer = await generateAudioMutation({ voiceId: formData.voice, audioPrompt: formData.audioPrompt });
+        const audioFile = await generateAudioMutation({ voiceId: formData.voice, audioPrompt: formData.audioPrompt });
         startTransition(() => {
-          const blob = new Blob([audioBuffer], { type: 'audio/mp3' });
-          const audioUrl = URL.createObjectURL(blob);
-
-          // const arrayBuffer = await blob.arrayBuffer();
-          // const fileName = `audio_${uuidv4()}.mp3`; // Generate a unique filename
-          // await fileMutation({ blob: arrayBuffer, fileName });
-          
-          setAudioSrc(audioUrl);
+          setAudioSrc(audioFile.outputUri ?? null);
         });
       } catch (error) {
         console.error("Failed to generate audio:", error);
@@ -154,8 +146,9 @@ export default function CreatePodcastPage() {
             )}
           />
           <Button type='button' disabled={isPending} onClick={() => handleGenerateAudio()}>Generate Voice</Button>
+
           {audioSrc && (
-            <audio controls src={audioSrc}></audio>
+            <audio controls src={audioSrc} mediaGroup='audio'></audio>
           )}
 
           {/* Submit Button */}

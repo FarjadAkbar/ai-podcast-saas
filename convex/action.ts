@@ -1,8 +1,7 @@
 import { action } from "./_generated/server";
 import { v } from "convex/values";
-import { PollyClient, DescribeVoicesCommand, SynthesizeSpeechCommand, VoiceId } from "@aws-sdk/client-polly";
+import { PollyClient, DescribeVoicesCommand, VoiceId, StartSpeechSynthesisTaskCommand } from "@aws-sdk/client-polly";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
-import { Buffer } from 'buffer';
 
 const config = {
   region: process.env.AWS_ACCESS_REGION!,
@@ -41,54 +40,42 @@ export const generateAudio = action({
 
   handler: async (ctx, args) => {
     try {
-      const command = new SynthesizeSpeechCommand({
+      const command = new StartSpeechSynthesisTaskCommand({
         Engine: 'standard',
         LanguageCode: 'en-US',
         OutputFormat: 'mp3',
+        OutputS3BucketName: process.env.AWS_S3_BUCKET,
+        OutputS3KeyPrefix: 'audio',
         VoiceId: args.voiceId as VoiceId,
         Text: args.audioPrompt
       });
 
       const response = await client.send(command);
 
-      if (response.AudioStream instanceof ReadableStream) {
-        const audioBuffer = await convertStreamToBuffer(response.AudioStream);
-        return audioBuffer;
+      if (response.SynthesisTask) {
+        const { TaskId, OutputUri, TaskStatus } = response.SynthesisTask;
+
+        return {
+          taskId: TaskId,
+          outputUri: OutputUri,
+          status: TaskStatus
+        };
       } else {
-        console.error('AudioStream is undefined or not a valid stream.');
-        throw new Error('Invalid AudioStream');
+        throw new Error('SynthesisTask is undefined');
       }
+      // if (response.AudioStream instanceof ReadableStream) {
+      //   const audioBuffer = await convertStreamToBuffer(response.AudioStream);
+      //   return audioBuffer;
+      // } else {
+      //   console.error('AudioStream is undefined or not a valid stream.');
+      //   throw new Error('Invalid AudioStream');
+      // }
     } catch (error) {
       console.error('Error generating audio:', error);
       throw error;
     }
   }
 });
-
-
-export const uploadToS3 = action({
-    args: { blob: v.bytes(), fileName: v.string() },
-  
-    handler: async (ctx, args) => {
-      try {
-        const buffer = Buffer.from(args.blob); // Create a Buffer from ArrayBuffer
-
-        const data = await s3Client.send(new PutObjectCommand({
-        Bucket: process.env.AWS_S3_BUCKET,
-          Key: args.fileName,
-          Body: buffer, // Use the Buffer here
-          ContentType: 'audio/mp3',
-        }));
-  
-          console.log("Successfully uploaded file to S3:", data);
-          return data; // Optionally return the response
-  
-      } catch (error) {
-        console.error('Error generating audio:', error);
-        throw error;
-      }
-    }
-  });
 
 const convertStreamToBuffer = async (stream: ReadableStream): Promise<ArrayBuffer> => {
     const reader = stream.getReader();
